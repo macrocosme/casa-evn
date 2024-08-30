@@ -58,7 +58,6 @@ if [ ! -d $workdir ]; then
 fi
 cd $workdir
 
-export PYTHONPATH=$DATA/scripts:/home/matchmkr-dvohl/casa-vlbi:$PYTHONPATH
 
 # Launch casa with n processes
 if [[ -z "$cpu" || $cpu -le 1 ]]; then
@@ -66,5 +65,5 @@ if [[ -z "$cpu" || $cpu -le 1 ]]; then
     casa
 else
     echo "mpicasa -n $cpu casa"
-    mpicasa -n $cpu casaimport 
+    mpicasa -n $cpu casa
 fi
