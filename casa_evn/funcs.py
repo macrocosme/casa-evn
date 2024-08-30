@@ -3,8 +3,11 @@ from astropy.io import fits as pyfits
 from casavlbitools import fitsidi
 from casatasks import applycal, flagdata, flagmanager, gencal, importfitsidi, listobs
 from casaplotms import plotms
+from casatools import msmetadata as msmd
+import glob
 
 
+# General
 def gunzip(basedir, calibdir, keep=False):
     search_gz = f"{basedir}/{calibdir}"
     for f in os.listdir(search_gz):
@@ -14,68 +17,40 @@ def gunzip(basedir, calibdir, keep=False):
             os.system(cmd)
 
 
-def get_idifiles(basedir, fitsdir):
-    idis = []
-    fits = f"{basedir}/{fitsdir}"
-    for f in os.listdir(fits):
-        if "IDI" in f:
-            idis.append(f"{fits}/{f}")
-        return idis
+def get_idifiles(basedir, fitsdir, experiment):
+    import re
+
+    natsort = lambda s: [
+        int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)
+    ]
+    idifiles = sorted(glob.glob(f"{basedir}/{fitsdir}/{experiment}*IDI*"), key=natsort)
+    return idifiles
 
 
-def import_fits_idi(basedir, fitsdir, workdir, prj, vis, idifiles):
-    importfitsidi(
-        fitsidifile=idifiles,
-        vis=vis,
-        constobsid=True,
-        scanreindexgap_s=15.0,
-        specframe="GEO",
-    )
-
-
-def convert_flag(basedir, calibdir, workdir, prj, idifiles):
-    AIPSflag = f"{basedir}/{calibdir}/{prj}.uvflg"
-    outfile = f"{basedir}/{workdir}/{prj}.flag"
-    fitsidi.convert_flags(AIPSflag, idifiles, outfile=outfile)
-
-
-def flag_data(basedir, workdir, prj, vis):
-    flagfile = f"{basedir}/{workdir}/{prj}.flag"
-    flagdata(
-        vis=vis,
-        mode="list",
-        inpfile=flagfile,
-        reason="any",
-        action="apply",
-        flagbackup=False,
-        savepars=False,
-    )
-
-
-def set_working_vars(basedir, workdir, prj):
+def set_working_vars(basedir, workdir, experiment):
     """Set working variables
 
     Parameters
     ----------
-        basedir, workdir, prj
+        basedir, workdir, experiment
 
     Returns
     -------
         gcaltab, tsystab, sbdtab, mbdtab, bpasstab
     """
     set_working_vars_base = (
-        lambda basedir, extradir, prj, extension: f"{basedir}/{extradir}/{prj}.{extension}"
+        lambda basedir, extradir, experiment, extension: f"{basedir}/{extradir}/{experiment}.{extension}"
     )
-    gcaltab = set_working_vars_base(basedir, workdir, prj, "gcal")
-    tsystab = set_working_vars_base(basedir, workdir, prj, "tsys")
-    sbdtab = set_working_vars_base(basedir, workdir, prj, "sbd")
-    mbdtab = set_working_vars_base(basedir, workdir, prj, "mbd")
-    bpasstab = set_working_vars_base(basedir, workdir, prj, "bpass")
+    gcaltab = set_working_vars_base(basedir, workdir, experiment, "gcal")
+    tsystab = set_working_vars_base(basedir, workdir, experiment, "tsys")
+    sbdtab = set_working_vars_base(basedir, workdir, experiment, "sbd")
+    mbdtab = set_working_vars_base(basedir, workdir, experiment, "mbd")
+    bpasstab = set_working_vars_base(basedir, workdir, experiment, "bpass")
     return (gcaltab, tsystab, sbdtab, mbdtab, bpasstab)
 
 
-def append_tsys_gaincurve(basedir, calibdir, prj, idifiles):
-    antabfile = f"{basedir}/{calibdir}/{prj}.antab"
+def append_tsys_gaincurve(basedir, calibdir, experiment, idifiles):
+    antabfile = f"{basedir}/{calibdir}/{experiment}.antab"
     try:
         hdulist = pyfits.open(idifiles[0])
         hdu = hdulist["SYSTEM_TEMPERATURE"]
@@ -101,6 +76,36 @@ def append_tsys_gaincurve(basedir, calibdir, prj, idifiles):
         print("🛑 Your FITS-IDI files cannot be found, have you set the correct path?")
 
 
+def import_fits_idi(basedir, fitsdir, workdir, experiment, vis, idifiles):
+    importfitsidi(
+        fitsidifile=idifiles,
+        vis=vis,
+        constobsid=True,
+        scanreindexgap_s=15.0,
+        specframe="GEO",
+    )
+
+
+# Data reduction & calibration
+def convert_flag(basedir, calibdir, workdir, experiment, idifiles):
+    AIPSflag = f"{basedir}/{calibdir}/{experiment}.uvflg"
+    outfile = f"{basedir}/{workdir}/{experiment}.flag"
+    fitsidi.convert_flags(AIPSflag, idifiles, outfile=outfile)
+
+
+def flag_data(basedir, workdir, experiment, vis):
+    flagfile = f"{basedir}/{workdir}/{experiment}.flag"
+    flagdata(
+        vis=vis,
+        mode="list",
+        inpfile=flagfile,
+        reason="any",
+        action="apply",
+        flagbackup=True,
+        savepars=False,
+    )
+
+
 def gen_cal(vis, tsystab, gcaltab):
     gencal(vis, caltable=tsystab, caltype="tsys", uniform=False)
     gencal(vis, caltable=gcaltab, caltype="gc", infile="EVN.gc")
@@ -110,6 +115,7 @@ def apply_cal(vis, tsystab, gcaltab):
     applycal(vis=vis, åå=[tsystab, gcaltab], flagbackup=False, parang=True)
 
 
+# Quick plot
 def plotms_phase_freq(vis, ref="EF", field="0", avgtime="600"):
     plotms(
         vis=vis,
@@ -184,10 +190,19 @@ def plotms_time_amplitude(vis, ref="EF", field="0", avgchannel="64"):
     )
 
 
-def get_flag_autocorrelation_cmd():
-    print(
-        "msmd.open(vis)\nnspw=msmd.nspw()\nnchan=msmd.nchan(1)\nmsmd.done()\nflagdata(vis,mode='manual',autocorr=True,flagbackup=False)\nmyflags=None\nedgefraction = 0.1\nflagfraction = int(nchan/(100*edgefraction)) \nstart = str(flagfraction-1)\nend = str(nchan-flagfraction)\nspwflag = '*:0~'+start+';'+end+'~'+str(nchan-1)"
-    )
+def get_flag_autocorrelation_cmd(vis):
+    print("To flag autocorrelation:")
+    msmd.open(vis)
+    nspw = msmd.nspw()
+    nchan = msmd.nchan(1)
+    msmd.done()
+    flagdata(vis, mode="manual", autocorr=True, flagbackup=False)
+    myflags = None
+    edgefraction = 0.1
+    flagfraction = int(nchan / (100 * edgefraction))
+    start = str(flagfraction - 1)
+    end = str(nchan - flagfraction)
+    spwflag = "*:0~" + start + ";" + end + "~" + str(nchan - 1)
 
 
 def flagquack_intervals(vis):
@@ -200,15 +215,16 @@ def flagquack_intervals(vis):
     )
 
 
-def gen_list_of_scans(basedir, calibdir, prj, vis):
-    listobsfile = f"{basedir}/{calibdir}/{prj}.listobs"
+def gen_list_of_scans(basedir, calibdir, experiment, vis):
+    listobsfile = f"{basedir}/{calibdir}/{experiment}.listobs"
     if os.path.isfile(listobsfile) == False:
         listobs(vis, listfile=listobsfile)
     else:
         print("✅ A file with listobs information is already present")
 
 
-basedir_subdir_experiment = lambda base, sub, prj: f"{base}/{sub}/{prj}"
+basedir_subdir_experiment = lambda base, sub, experiment: f"{base}/{sub}/{experiment}"
+
 
 # # *****
 # # Fringe fitting
@@ -266,9 +282,9 @@ basedir_subdir_experiment = lambda base, sub, prj: f"{base}/{sub}/{prj}"
 #     parang=True)
 # # ***
 
-# def polarization_calibration(basedir, workdir, prj):
+# def polarization_calibration(basedir, workdir, experiment):
 #     print(f"""tget tclean
-#     basename = basedir_subdir_experiment(basedir, workdir, prj)
+#     basename = basedir_subdir_experiment(basedir, workdir, experiment)
 #     vis = '{f'{basename}'}.ms'
 #     flagfile = '{f'{basename}'}.flag'
 #     field = '0'
