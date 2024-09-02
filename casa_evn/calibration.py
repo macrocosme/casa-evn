@@ -2,8 +2,7 @@ import os
 import numpy as np
 from . import funcs as _f
 
-# basedir, workdir = os.path.split(os.path.abspath("."))
-basedir, workdir = os.path.split("/Volumes/macropouce/data/ev026/EV026F/run")
+basedir, workdir = os.path.split(os.path.abspath("."))
 fitsdir = "fits"
 calibdir = "pipeline_calibration"
 
