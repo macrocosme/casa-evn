@@ -17,6 +17,14 @@ def gunzip(basedir, calibdir, keep=False):
             os.system(cmd)
 
 
+def gen_list_of_scans(basedir, calibdir, experiment, vis):
+    listobsfile = f"{basedir}/{calibdir}/{experiment}.listobs"
+    if os.path.isfile(listobsfile) == False:
+        listobs(vis, listfile=listobsfile)
+    else:
+        print("✅ A file with listobs information is already present")
+
+
 def get_idifiles(basedir, fitsdir, experiment):
     import re
 
@@ -77,6 +85,7 @@ def append_tsys_gaincurve(basedir, calibdir, experiment, idifiles):
 
 
 def import_fits_idi(basedir, fitsdir, workdir, experiment, vis, idifiles):
+    #
     importfitsidi(
         fitsidifile=idifiles,
         vis=vis,
@@ -112,7 +121,38 @@ def gen_cal(vis, tsystab, gcaltab):
 
 
 def apply_cal(vis, tsystab, gcaltab):
-    applycal(vis=vis, åå=[tsystab, gcaltab], flagbackup=False, parang=True)
+    applycal(vis=vis, gaintable=[tsystab, gcaltab], flagbackup=False, parang=True)
+
+
+def flag_autocorrelation(vis):
+    print("To flag autocorrelation:")
+    msmd.open(vis)
+    nspw = msmd.nspw()
+    nchan = msmd.nchan(1)
+    msmd.done()
+
+    flagdata(vis, mode="manual", autocorr=True, flagbackup=False)
+    myflags = None
+    edgefraction = 0.1
+    flagfraction = int(nchan / (100 * edgefraction))
+    start = str(flagfraction - 1)
+    end = str(nchan - flagfraction)
+    spwflag = "*:0~" + start + ";" + end + "~" + str(nchan - 1)
+
+    # return nspw, myflags, spwflag
+
+
+def flagquack_intervals(vis):
+    flagdata(vis, mode="quack", quackinterval=5, flagbackup=False)
+    flagmanager(
+        vis,
+        mode="save",
+        versionname="precal_flags",
+        comment="Flags from Tsys, gaincal, bad data and edge channels",
+    )
+
+
+basedir_subdir_experiment = lambda base, sub, experiment: f"{base}/{sub}/{experiment}"
 
 
 # Quick plot
@@ -188,42 +228,6 @@ def plotms_time_amplitude(vis, ref="EF", field="0", avgchannel="64"):
         gridcols=3,
         field=field,
     )
-
-
-def get_flag_autocorrelation_cmd(vis):
-    print("To flag autocorrelation:")
-    msmd.open(vis)
-    nspw = msmd.nspw()
-    nchan = msmd.nchan(1)
-    msmd.done()
-    flagdata(vis, mode="manual", autocorr=True, flagbackup=False)
-    myflags = None
-    edgefraction = 0.1
-    flagfraction = int(nchan / (100 * edgefraction))
-    start = str(flagfraction - 1)
-    end = str(nchan - flagfraction)
-    spwflag = "*:0~" + start + ";" + end + "~" + str(nchan - 1)
-
-
-def flagquack_intervals(vis):
-    flagdata(vis, mode="quack", quackinterval=5, flagbackup=False)
-    flagmanager(
-        vis,
-        mode="save",
-        versionname="precal_flags",
-        comment="Flags from Tsys, gaincal, bad data and edge channels",
-    )
-
-
-def gen_list_of_scans(basedir, calibdir, experiment, vis):
-    listobsfile = f"{basedir}/{calibdir}/{experiment}.listobs"
-    if os.path.isfile(listobsfile) == False:
-        listobs(vis, listfile=listobsfile)
-    else:
-        print("✅ A file with listobs information is already present")
-
-
-basedir_subdir_experiment = lambda base, sub, experiment: f"{base}/{sub}/{experiment}"
 
 
 # # *****

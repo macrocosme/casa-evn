@@ -2,7 +2,8 @@ import os
 import numpy as np
 from . import funcs as _f
 
-basedir, workdir = os.path.split(os.path.abspath("."))
+# basedir, workdir = os.path.split(os.path.abspath("."))
+basedir, workdir = os.path.split("/Volumes/macropouce/data/ev026/EV026F/run")
 fitsdir = "fits"
 calibdir = "pipeline_calibration"
 
@@ -12,7 +13,8 @@ set_vis = (
 get_steps = lambda: [
     "unzip_gz",
     "check_tsys_gaincurve",
-    "gen_list_of_scans" "convert_flag",
+    "gen_list_of_scans",
+    "convert_flag",
     "import_fits_idi",
     "flag_data",
     "gen_cal",
@@ -21,6 +23,18 @@ get_steps = lambda: [
     "flagquack_intervals",
 ]
 dict_as_list = lambda _dict: (_dict[v] for v in _dict.keys())
+steps_desc = {
+    "unzip_gz": "Unzipping gz files",
+    "check_tsys_gaincurve": "Checking TSYS and gain curve exist",
+    "gen_list_of_scans": "Generating list of scans",
+    "convert_flag": "coverting flag",
+    "import_fits_idi": "Importing FITS-IDI files",
+    "flag_data": "Flagging data",
+    "gen_cal": "Generating calibration",
+    "apply_cal": "Applying calibration",
+    "flag_autocorrelation": "Flagging autocorrelation",
+    "flagquack_intervals": "Flagging quack intervals",
+}
 
 
 def get_variables(experiment, refant="EF", return_as_dict=False):
@@ -63,7 +77,7 @@ def get_variables(experiment, refant="EF", return_as_dict=False):
         return dict_as_list(d)
 
 
-def run_steps(experiment, steps=get_steps()):
+def run_steps(experiment, steps=get_steps(), verbose=True):
     """Generate strings matching function calls
 
     Parameters
@@ -78,33 +92,53 @@ def run_steps(experiment, steps=get_steps()):
     )
 
     if is_in_steps("unzip_gz"):
+        if verbose:
+            print("Unzipping gz files")
         _f.gunzip(basedir, calibdir)
 
-    if is_in_steps("import_fits_idi"):
-        _f.import_fits_idi(basedir, fitsdir, workdir, experiment, vis, idifiles)
-
     if is_in_steps("check_tsys_gaincurve"):
+        if verbose:
+            print("Checking TSYS and gain curve")
         _f.append_tsys_gaincurve(basedir, calibdir, experiment, idifiles)
 
-    if is_in_steps("gen_list_of_scans"):
-        _f.gen_list_of_scans(basedir, calibdir, experiment, vis)
-
-    if is_in_steps("flag_data"):
-        _f.flag_data(basedir, workdir, experiment, vis)
-
     if is_in_steps("convert_flag"):
+        if verbose:
+            print("Converting flag")
         _f.convert_flag(basedir, calibdir, workdir, experiment, idifiles)
 
+    if is_in_steps("gen_list_of_scans"):
+        if verbose:
+            print("Generating list of scans")
+        _f.gen_list_of_scans(basedir, calibdir, experiment, vis)
+
+    if is_in_steps("import_fits_idi"):
+        if verbose:
+            print("Importing FITS-IDI files")
+        _f.import_fits_idi(basedir, fitsdir, workdir, experiment, vis, idifiles)
+
+    if is_in_steps("flag_data"):
+        if verbose:
+            print("Flagging data")
+        _f.flag_data(basedir, workdir, experiment, vis)
+
     if is_in_steps("gen_cal"):
-        _f.gen_cal(vis, tsystab, gcaltab, vis)
+        if verbose:
+            print("Generating calibration")
+        _f.gen_cal(vis, tsystab, gcaltab)
 
     if is_in_steps("apply_cal"):
+        if verbose:
+            print("Applying calibration")
         _f.apply_cal(vis, tsystab, gcaltab)
 
     if is_in_steps("flag_autocorrelation"):
-        _f.get_flag_autocorrelation_cmd()
+        if verbose:
+            print("Flagging autocorrelation")
+        _f.flag_autocorrelation(vis)
 
     if is_in_steps("flagquack_intervals"):
+        if verbose:
+            print("Flagging quack intervals")
         _f.flagquack_intervals(vis)
 
     if is_in_steps(""):
